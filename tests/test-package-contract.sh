@@ -21,6 +21,11 @@ done
 
 grep -q '^LUCI_DEPENDS:=.*+rpcd-mod-file' "$ROOT/Makefile"
 grep -Fq "'require dom';" "$VIEW"
+grep -Fq 'uses: actions/cache/restore@v4' "$WORKFLOW"
+grep -Fq 'uses: actions/cache/save@v4' "$WORKFLOW"
+grep -Fq 'key: sdk-${{ runner.os }}-${{ matrix.sdk }}-feeds-v1' "$WORKFLOW"
+grep -Fq 'path: sdk' "$WORKFLOW"
+grep -Fq "steps.sdk-cache.outputs.cache-hit != 'true'" "$WORKFLOW"
 grep -Fq './scripts/feeds update -a' "$WORKFLOW"
 grep -Fq './scripts/feeds install -a' "$WORKFLOW"
 awk -F= '

@@ -31,10 +31,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Restore prepared SDK
+        id: sdk-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: sdk
+          key: sdk-${{ runner.os }}-${{ matrix.sdk }}-feeds-v1
+
       - name: Install archive tools
+        if: steps.sdk-cache.outputs.cache-hit != 'true'
         run: sudo apt-get update && sudo apt-get install --yes zstd
 
       - name: Download and verify SDK
+        if: steps.sdk-cache.outputs.cache-hit != 'true'
         env:
           BASE_URL: ${{ matrix.base_url }}
           SDK_ARCHIVE: ${{ matrix.sdk }}
@@ -46,10 +55,18 @@ jobs:
           tar --extract --file "$SDK_ARCHIVE" --directory sdk --strip-components=1
 
       - name: Prepare package feeds
+        if: steps.sdk-cache.outputs.cache-hit != 'true'
         working-directory: sdk
         run: |
           ./scripts/feeds update -a
           ./scripts/feeds install -a
+
+      - name: Save prepared SDK
+        if: steps.sdk-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: sdk
+          key: sdk-${{ runner.os }}-${{ matrix.sdk }}-feeds-v1
 
       - name: Build package
         env:
