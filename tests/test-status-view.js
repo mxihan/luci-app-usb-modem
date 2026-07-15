@@ -65,6 +65,18 @@ async function main() {
 	assert.match(incomplete, /incomplete/i);
 	assert.doesNotMatch(incomplete, /Everything is fine/);
 
+	const unknownConnected = JSON.stringify(view.renderStatus({
+		network: { operstate: 'unknown', carrier: true }
+	}));
+	assert.match(unknownConnected, /Connected/);
+	assert.doesNotMatch(unknownConnected, /"unknown"/);
+
+	const unknownInactive = JSON.stringify(view.renderStatus({
+		network: { operstate: 'unknown', carrier: false }
+	}));
+	assert.match(unknownInactive, /Inactive/);
+	assert.doesNotMatch(unknownInactive, /"unknown"/);
+
 	view = loadView(function() { return Promise.resolve({ code: 0, stdout: '' }); });
 	await expectReject(view.loadStatus(), /empty|invalid/i);
 

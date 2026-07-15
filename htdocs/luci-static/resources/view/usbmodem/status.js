@@ -26,6 +26,13 @@ function card(title, rows) {
 	]);
 }
 
+function operationalState(network) {
+	if (network.operstate === 'unknown')
+		return network.carrier ? _('Connected') : _('Inactive');
+
+	return network.operstate;
+}
+
 function statusHelperError(detail) {
 	detail = detail && (detail.message || detail.stderr || detail.stdout || detail);
 
@@ -149,7 +156,7 @@ return view.extend({
 			card(_('USB Modem Network'), [
 				row(_('Detected'), badge(data.modem.detected, _('Yes'), _('No'))),
 				row(_('Interface'), data.network.interface),
-				row(_('Operational state'), data.network.operstate),
+				row(_('Operational state'), operationalState(data.network)),
 				row(_('Carrier'), badge(data.network.carrier, _('Present'), _('Missing'))),
 				row(_('IPv4 address'), data.network.ipv4),
 				row(_('MAC address'), data.network.mac)
