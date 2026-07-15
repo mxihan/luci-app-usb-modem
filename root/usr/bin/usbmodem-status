@@ -1,0 +1,55 @@
+#!/bin/sh
+set -u
+SYS_ROOT="${SYS_ROOT:-/sys}"
+DRIVER_DIR="${DRIVER_DIR:-$SYS_ROOT/bus/platform/drivers/xhci-mtk}"
+DEVICE_ID="${DEVICE_ID:-11200000.usb}"
+IP_CMD="${IP_CMD:-ip}"
+LOG_CMD="${LOG_CMD:-logread}"
+
+json_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\n//g' | awk 'BEGIN{ORS="\\n"}{printf "%s",$0}'; }
+bool() { [ "$1" = 1 ] && printf true || printf false; }
+
+bound=0; [ -e "$DRIVER_DIR/$DEVICE_ID" ] && bound=1
+iface=""
+for n in "$SYS_ROOT"/class/net/*; do
+  [ -d "$n" ] || continue
+  name="${n##*/}"
+  target="$(readlink -f "$n/device/driver" 2>/dev/null || true)"
+  case "$target" in
+    *rndis_host*|*cdc_ether*|*cdc_ncm*|*cdc_mbim*|*qmi_wwan*|*usbnet*) iface="$name"; break ;;
+  esac
+done
+[ -n "$iface" ] || [ ! -d "$SYS_ROOT/class/net/eth2" ] || iface=eth2
+
+operstate="missing"; carrier=0; mac=""; ipv4=""
+if [ -n "$iface" ]; then
+  operstate="$(cat "$SYS_ROOT/class/net/$iface/operstate" 2>/dev/null || echo unknown)"
+  carrier="$(cat "$SYS_ROOT/class/net/$iface/carrier" 2>/dev/null || echo 0)"
+  mac="$(cat "$SYS_ROOT/class/net/$iface/address" 2>/dev/null || true)"
+  ipv4="$($IP_CMD -j addr show dev "$iface" 2>/dev/null | sed -n 's/.*"family":"inet","local":"\([^"]*\)".*/\1/p' | head -n1)"
+fi
+
+rndis=0; usbnet=0; cdc_ether=0; cdc_ncm=0
+[ -d "$SYS_ROOT/module/rndis_host" ] && rndis=1
+[ -d "$SYS_ROOT/module/usbnet" ] && usbnet=1
+[ -d "$SYS_ROOT/module/cdc_ether" ] && cdc_ether=1
+[ -d "$SYS_ROOT/module/cdc_ncm" ] && cdc_ncm=1
+
+logs="$($LOG_CMD 2>/dev/null | grep -Ei 'xhci|HC died|command ring|TR Deq|rndis|usbnet|USB disconnect|device descriptor|error -110|error -71' | tail -n 30 || true)"
+crashed=0
+echo "$logs" | grep -Eqi 'HC died|host controller not responding|Abort failed to stop command ring' && crashed=1
+healthy=0
+[ "$bound" = 1 ] && [ -n "$iface" ] && [ "$crashed" = 0 ] && healthy=1
+if [ "$crashed" = 1 ]; then diagnosis='USB Host Controller appears to have crashed.'
+elif [ "$bound" = 0 ]; then diagnosis='USB controller is not bound.'
+elif [ -z "$iface" ]; then diagnosis='No USB modem network interface was detected.'
+else diagnosis='USB modem link appears healthy.'; fi
+
+printf '{'
+printf '"controller":{"driver":"xhci-mtk","device":"%s","bound":' "$(json_escape "$DEVICE_ID")"; bool "$bound"; printf ',"crashed":'; bool "$crashed"; printf '},'
+printf '"modem":{"detected":'; [ -n "$iface" ] && bool 1 || bool 0; printf '},'
+printf '"network":{"interface":"%s","operstate":"%s","carrier":' "$(json_escape "$iface")" "$(json_escape "$operstate")"; bool "$carrier"; printf ',"mac":"%s","ipv4":"%s"},' "$(json_escape "$mac")" "$(json_escape "$ipv4")"
+printf '"drivers":{"rndis_host":'; bool "$rndis"; printf ',"usbnet":'; bool "$usbnet"; printf ',"cdc_ether":'; bool "$cdc_ether"; printf ',"cdc_ncm":'; bool "$cdc_ncm"; printf '},'
+printf '"diagnosis":{"healthy":'; bool "$healthy"; printf ',"message":"%s"},' "$(json_escape "$diagnosis")"
+printf '"logs":"%s"' "$(json_escape "$logs")"
+printf '}\n'

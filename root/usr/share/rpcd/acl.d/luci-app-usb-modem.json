@@ -1,0 +1,21 @@
+{
+  "luci-app-usb-modem": {
+    "description": "Grant access to USB modem status and recovery helpers",
+    "read": {
+      "ubus": {
+        "file": [ "exec" ]
+      },
+      "file": {
+        "/usr/bin/usbmodem-status": [ "exec" ]
+      }
+    },
+    "write": {
+      "ubus": {
+        "file": [ "exec" ]
+      },
+      "file": {
+        "/usr/bin/usbmodem-restart": [ "exec" ]
+      }
+    }
+  }
+}

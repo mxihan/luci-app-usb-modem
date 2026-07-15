@@ -1,0 +1,13 @@
+#!/bin/sh
+set -u
+DRIVER_DIR="${DRIVER_DIR:-/sys/bus/platform/drivers/xhci-mtk}"
+DEVICE_ID="${DEVICE_ID:-11200000.usb}"
+SLEEP_CMD="${SLEEP_CMD:-sleep 2}"
+escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+fail() { printf '{"ok":false,"message":"%s"}\n' "$(escape "$1")"; exit 1; }
+[ -d "$DRIVER_DIR" ] || fail "Driver directory not found: $DRIVER_DIR"
+[ -e "$DRIVER_DIR/$DEVICE_ID" ] || fail "Controller is not currently bound: $DEVICE_ID"
+printf '%s\n' "$DEVICE_ID" > "$DRIVER_DIR/unbind" || fail 'Failed to unbind USB controller'
+sh -c "$SLEEP_CMD"
+printf '%s\n' "$DEVICE_ID" > "$DRIVER_DIR/bind" || fail 'Failed to bind USB controller'
+printf '{"ok":true,"message":"USB controller restart requested."}\n'

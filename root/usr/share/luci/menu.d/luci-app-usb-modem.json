@@ -1,0 +1,13 @@
+{
+  "admin/status/usbmodem": {
+    "title": "USB Modem",
+    "order": 80,
+    "action": {
+      "type": "view",
+      "path": "usbmodem/status"
+    },
+    "depends": {
+      "acl": [ "luci-app-usb-modem" ]
+    }
+  }
+}
