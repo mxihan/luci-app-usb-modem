@@ -3,6 +3,7 @@
 'require fs';
 'require ui';
 'require poll';
+'require dom';
 
 const STATUS_CMD = '/usr/bin/usbmodem-status';
 const RESTART_CMD = '/usr/bin/usbmodem-restart';

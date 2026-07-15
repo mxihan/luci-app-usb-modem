@@ -15,10 +15,12 @@ for helper in /usr/bin/usbmodem-status /usr/bin/usbmodem-restart; do
 	git -C "$ROOT" ls-files --stage "root$helper" | grep -q '^100755 '
 	grep -Fq "'$helper'" "$VIEW"
 	grep -Fq "\"$helper\"" "$ACL"
+	node -e "if (require('fs').readFileSync(process.argv[1]).includes(13)) { console.error('CRLF line endings are not allowed in executable helper: ' + process.argv[1]); process.exit(1) }" "$ROOT/root$helper"
 	sh -n "$ROOT/root$helper"
 done
 
 grep -q '^LUCI_DEPENDS:=.*+rpcd-mod-file' "$ROOT/Makefile"
+grep -Fq "'require dom';" "$VIEW"
 grep -Fq './scripts/feeds update -a' "$WORKFLOW"
 grep -Fq './scripts/feeds install -a' "$WORKFLOW"
 awk -F= '
