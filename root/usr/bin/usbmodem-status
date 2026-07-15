@@ -6,13 +6,16 @@ DRIVER_DIR="${DRIVER_DIR:-$SYS_ROOT/bus/platform/drivers/xhci-mtk}"
 DEVICE_ID="${DEVICE_ID:-11200000.usb}"
 IP_CMD="${IP_CMD:-ip}"
 LOG_CMD="${LOG_CMD:-logread}"
+READLINK_CMD="${READLINK_CMD:-readlink}"
 
 json_escape() {
-	printf '%s' "$1" | awk '
+	printf '%s' "$1" | awk -v tab="$(printf '\t')" -v cr="$(printf '\r')" '
 		BEGIN { first = 1 }
 		{
 			gsub(/\\/, "\\\\");
-			gsub(/\"/, "\\\"");
+			gsub(/"/, "\\\"");
+			gsub(tab, "\\t");
+			gsub(cr, "\\r");
 			if (!first)
 				printf "\\n";
 			printf "%s", $0;
@@ -31,7 +34,7 @@ iface=""
 for n in "$SYS_ROOT"/class/net/*; do
 	[ -d "$n" ] || continue
 	name="${n##*/}"
-	target="$(readlink -f "$n/device/driver" 2>/dev/null || true)"
+	target="$($READLINK_CMD -f "$n/device/driver" 2>/dev/null || true)"
 	case "$target" in
 		*rndis_host*|*cdc_ether*|*cdc_ncm*|*cdc_mbim*|*qmi_wwan*|*usbnet*)
 			iface="$name"

@@ -1,0 +1,92 @@
+name: Build IPK
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: openwrt-23.05
+            base_url: https://downloads.openwrt.org/releases/23.05.5/targets/x86/64
+            sdk: openwrt-sdk-23.05.5-x86-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz
+          - name: openwrt-24.10
+            base_url: https://downloads.openwrt.org/releases/24.10.2/targets/x86/64
+            sdk: openwrt-sdk-24.10.2-x86-64_gcc-13.3.0_musl.Linux-x86_64.tar.zst
+          - name: immortalwrt-24.10
+            base_url: https://downloads.immortalwrt.org/releases/24.10.2/targets/x86/64
+            sdk: immortalwrt-sdk-24.10.2-x86-64_gcc-13.3.0_musl.Linux-x86_64.tar.zst
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install archive tools
+        run: sudo apt-get update && sudo apt-get install --yes zstd
+
+      - name: Download and verify SDK
+        env:
+          BASE_URL: ${{ matrix.base_url }}
+          SDK_ARCHIVE: ${{ matrix.sdk }}
+        run: |
+          curl --fail --location --retry 3 --remote-name "$BASE_URL/$SDK_ARCHIVE"
+          curl --fail --location --retry 3 --output sha256sums "$BASE_URL/sha256sums"
+          grep -F " *$SDK_ARCHIVE" sha256sums | sha256sum --check
+          mkdir sdk
+          tar --extract --file "$SDK_ARCHIVE" --directory sdk --strip-components=1
+
+      - name: Prepare LuCI feed
+        working-directory: sdk
+        run: |
+          ./scripts/feeds update luci
+          ./scripts/feeds install -a -p luci
+
+      - name: Build package
+        env:
+          SDK_DIR: ${{ github.workspace }}/sdk
+          OUTPUT_DIR: ${{ github.workspace }}/dist/${{ matrix.name }}
+        run: ./scripts/build-ipk.sh
+
+      - name: Upload IPK
+        uses: actions/upload-artifact@v4
+        with:
+          name: luci-app-usb-modem-${{ matrix.name }}
+          path: dist/${{ matrix.name }}/*.ipk
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: luci-app-usb-modem-*
+          path: release-assets
+
+      - name: Publish release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          gh release view "$TAG" --repo "$REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "$TAG" --repo "$REPOSITORY" --generate-notes
+          for file in release-assets/*/*.ipk; do
+            artifact="$(basename "$(dirname "$file")")"
+            cp "$file" "release-assets/$artifact-$(basename "$file")"
+          done
+          gh release upload "$TAG" --repo "$REPOSITORY" --clobber \
+            release-assets/luci-app-usb-modem-*.ipk

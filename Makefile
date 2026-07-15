@@ -2,8 +2,9 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-usb-modem
 PKG_VERSION:=1.0.0
-PKG_RELEASE:=1
+PKG_RELEASE:=2
 PKG_LICENSE:=MIT
+PKG_LICENSE_FILES:=LICENSE
 PKG_MAINTAINER:=HoshimiRIN
 
 LUCI_TITLE:=LuCI USB modem diagnostics and xHCI recovery

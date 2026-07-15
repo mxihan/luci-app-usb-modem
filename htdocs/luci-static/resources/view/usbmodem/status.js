@@ -25,10 +25,36 @@ function card(title, rows) {
 	]);
 }
 
+function statusHelperError(detail) {
+	detail = detail && (detail.message || detail.stderr || detail.stdout || detail);
+
+	return new Error(detail
+		? _('Status helper is unavailable or inaccessible: %s').format(String(detail))
+		: _('Status helper is unavailable or inaccessible.'));
+}
+
+function hasFields(value, fields) {
+	if (!value || typeof value !== 'object' || Array.isArray(value))
+		return false;
+
+	for (var i = 0; i < fields.length; i++)
+		if (!Object.prototype.hasOwnProperty.call(value, fields[i]))
+			return false;
+
+	return true;
+}
+
 function normalizeStatus(data) {
 	data = data && typeof data === 'object' ? data : {};
+	var complete = hasFields(data, [ 'controller', 'modem', 'network', 'drivers', 'diagnosis', 'logs' ]) &&
+		hasFields(data.controller, [ 'driver', 'device', 'bound', 'crashed' ]) &&
+		hasFields(data.modem, [ 'detected' ]) &&
+		hasFields(data.network, [ 'interface', 'operstate', 'carrier', 'mac', 'ipv4' ]) &&
+		hasFields(data.drivers, [ 'rndis_host', 'usbnet', 'cdc_ether', 'cdc_ncm' ]) &&
+		hasFields(data.diagnosis, [ 'healthy', 'message' ]) &&
+		typeof data.logs === 'string';
 
-	return {
+	var normalized = {
 		controller: Object.assign({
 			driver: '-',
 			device: '-',
@@ -55,16 +81,34 @@ function normalizeStatus(data) {
 		}, data.diagnosis || {}),
 		logs: typeof data.logs === 'string' ? data.logs : ''
 	};
+
+	if (!complete)
+		normalized.diagnosis = {
+			healthy: false,
+			message: _('Status data is incomplete.')
+		};
+
+	return normalized;
 }
 
 return view.extend({
 	loadStatus: function() {
-		return fs.exec(STATUS_CMD).then(function(res) {
+		return fs.exec(STATUS_CMD).catch(function(err) {
+			throw statusHelperError(err);
+		}).then(function(res) {
 			if (!res || res.code !== 0)
-				throw new Error((res && (res.stderr || res.stdout)) || _('Status command failed'));
+				throw statusHelperError(res);
+
+			if (!res.stdout || !res.stdout.trim())
+				throw new Error(_('Invalid status response: empty output'));
 
 			try {
-				return normalizeStatus(JSON.parse(res.stdout || '{}'));
+				var parsed = JSON.parse(res.stdout);
+
+				if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+					throw new Error(_('expected a JSON object'));
+
+				return normalizeStatus(parsed);
 			}
 			catch (err) {
 				throw new Error(_('Invalid status response: %s').format(err.message));
