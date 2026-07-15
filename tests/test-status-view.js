@@ -59,6 +59,11 @@ async function main() {
 	assert.doesNotThrow(function() { view.renderStatus({}); });
 	assert.doesNotThrow(function() { view.renderStatus({ controller: {} }); });
 	assert.match(JSON.stringify(view.renderStatus({ loadError: 'Object not found' })), /Object not found/);
+	const incomplete = JSON.stringify(view.renderStatus({
+		diagnosis: { healthy: true, message: 'Everything is fine' }
+	}));
+	assert.match(incomplete, /incomplete/i);
+	assert.doesNotMatch(incomplete, /Everything is fine/);
 
 	view = loadView(function() { return Promise.resolve({ code: 0, stdout: '' }); });
 	await expectReject(view.loadStatus(), /empty|invalid/i);

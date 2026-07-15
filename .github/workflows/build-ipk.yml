@@ -75,7 +75,6 @@ jobs:
         with:
           pattern: luci-app-usb-modem-*
           path: release-assets
-          merge-multiple: true
 
       - name: Publish release assets
         env:
@@ -85,4 +84,9 @@ jobs:
         run: |
           gh release view "$TAG" --repo "$REPOSITORY" >/dev/null 2>&1 || \
             gh release create "$TAG" --repo "$REPOSITORY" --generate-notes
-          gh release upload "$TAG" --repo "$REPOSITORY" --clobber release-assets/*.ipk
+          for file in release-assets/*/*.ipk; do
+            artifact="$(basename "$(dirname "$file")")"
+            cp "$file" "release-assets/$artifact-$(basename "$file")"
+          done
+          gh release upload "$TAG" --repo "$REPOSITORY" --clobber \
+            release-assets/luci-app-usb-modem-*.ipk

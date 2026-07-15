@@ -30,20 +30,27 @@ mkdir -p "$STAGE"
 cp "$PACKAGE_DIR/Makefile" "$PACKAGE_DIR/LICENSE" "$STAGE/"
 cp -R "$PACKAGE_DIR/htdocs" "$PACKAGE_DIR/root" "$STAGE/"
 
+for search_dir in "$SDK_DIR/bin/packages" "$SDK_DIR/bin/targets"; do
+	[ -d "$search_dir" ] || continue
+	find "$search_dir" -type f -name 'luci-app-usb-modem_*.ipk' -delete
+done
+
 "$MAKE_CMD" -C "$SDK_DIR" defconfig
 "$MAKE_CMD" -C "$SDK_DIR" package/luci-app-usb-modem/compile V=s
 
-FOUND=0
+ARTIFACT_LIST="$(mktemp)"
+trap 'rm -f "$ARTIFACT_LIST"' EXIT HUP INT TERM
 for search_dir in "$SDK_DIR/bin/packages" "$SDK_DIR/bin/targets"; do
 	[ -d "$search_dir" ] || continue
-	for artifact in $(find "$search_dir" -type f -name 'luci-app-usb-modem_*.ipk'); do
-		cp "$artifact" "$OUTPUT_DIR/"
-		echo "$OUTPUT_DIR/${artifact##*/}"
-		FOUND=1
-	done
+	find "$search_dir" -type f -name 'luci-app-usb-modem_*.ipk' >> "$ARTIFACT_LIST"
 done
 
-if [ "$FOUND" -ne 1 ]; then
+if [ ! -s "$ARTIFACT_LIST" ]; then
 	echo 'No luci-app-usb-modem IPK was produced' >&2
 	exit 1
 fi
+
+while IFS= read -r artifact; do
+	cp "$artifact" "$OUTPUT_DIR/"
+	echo "$OUTPUT_DIR/${artifact##*/}"
+done < "$ARTIFACT_LIST"
