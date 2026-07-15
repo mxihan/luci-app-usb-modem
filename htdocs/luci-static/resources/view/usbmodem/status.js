@@ -25,16 +25,66 @@ function card(title, rows) {
 	]);
 }
 
+function normalizeStatus(data) {
+	data = data && typeof data === 'object' ? data : {};
+
+	return {
+		controller: Object.assign({
+			driver: '-',
+			device: '-',
+			bound: false,
+			crashed: false
+		}, data.controller || {}),
+		modem: Object.assign({ detected: false }, data.modem || {}),
+		network: Object.assign({
+			interface: '',
+			operstate: 'missing',
+			carrier: false,
+			mac: '',
+			ipv4: ''
+		}, data.network || {}),
+		drivers: Object.assign({
+			rndis_host: false,
+			usbnet: false,
+			cdc_ether: false,
+			cdc_ncm: false
+		}, data.drivers || {}),
+		diagnosis: Object.assign({
+			healthy: false,
+			message: _('Status data is incomplete.')
+		}, data.diagnosis || {}),
+		logs: typeof data.logs === 'string' ? data.logs : ''
+	};
+}
+
 return view.extend({
 	loadStatus: function() {
 		return fs.exec(STATUS_CMD).then(function(res) {
-			if (res.code !== 0)
-				throw new Error(res.stderr || _('Status command failed'));
-			return JSON.parse(res.stdout);
+			if (!res || res.code !== 0)
+				throw new Error((res && (res.stderr || res.stdout)) || _('Status command failed'));
+
+			try {
+				return normalizeStatus(JSON.parse(res.stdout || '{}'));
+			}
+			catch (err) {
+				throw new Error(_('Invalid status response: %s').format(err.message));
+			}
 		});
 	},
 
-	renderStatus: function(data) {
+	load: function() {
+		return this.loadStatus().catch(function(err) {
+			return {
+				loadError: err.message || String(err)
+			};
+		});
+	},
+
+	renderStatus: function(rawData) {
+		if (rawData && rawData.loadError)
+			return E('div', { 'class': 'alert-message error' }, rawData.loadError);
+
+		const data = normalizeStatus(rawData);
 		const diagnosis = E('div', {
 			'class': 'alert-message ' + (data.diagnosis.healthy ? 'success' : 'warning')
 		}, [
@@ -75,10 +125,13 @@ return view.extend({
 
 	refresh: function() {
 		const target = document.getElementById('usbmodem-status-body');
+		if (!target)
+			return Promise.resolve();
+
 		return this.loadStatus().then(L.bind(function(data) {
 			dom.content(target, this.renderStatus(data));
 		}, this)).catch(function(err) {
-			dom.content(target, E('div', { 'class': 'alert-message error' }, err.message));
+			dom.content(target, E('div', { 'class': 'alert-message error' }, err.message || String(err)));
 		});
 	},
 
@@ -94,15 +147,15 @@ return view.extend({
 						ui.hideModal();
 						ui.showModal(_('Restarting'), [ E('p', { 'class': 'spinning' }, _('Restarting USB controller…')) ]);
 						fs.exec(RESTART_CMD).then(L.bind(function(res) {
-							if (res.code !== 0)
-								throw new Error(res.stderr || res.stdout || _('Restart failed'));
-							return new Promise(resolve => window.setTimeout(resolve, 8000));
+							if (!res || res.code !== 0)
+								throw new Error((res && (res.stderr || res.stdout)) || _('Restart failed'));
+							return new Promise(function(resolve) { window.setTimeout(resolve, 8000); });
 						}, this)).then(L.bind(function() {
 							ui.hideModal();
 							return this.refresh();
 						}, this)).catch(function(err) {
 							ui.hideModal();
-							ui.addNotification(null, E('p', {}, err.message), 'error');
+							ui.addNotification(null, E('p', {}, err.message || String(err)), 'error');
 						});
 					}, this)
 				}, _('Restart controller'))
@@ -113,6 +166,7 @@ return view.extend({
 	render: function(data) {
 		const body = E('div', { 'id': 'usbmodem-status-body' }, this.renderStatus(data));
 		poll.add(L.bind(this.refresh, this), 5);
+
 		return E([], [
 			E('h2', {}, _('USB Modem Status')),
 			E('p', {}, _('Monitor the USB host controller, modem network interface, drivers and recent kernel events.')),
